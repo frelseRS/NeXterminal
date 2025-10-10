@@ -1,0 +1,1 @@
+export interface HistoryItem { cmd: string; out: string; ts: Date }
