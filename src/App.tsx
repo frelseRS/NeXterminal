@@ -154,23 +154,12 @@ export default function App(): JSX.Element {
                   <div className="flex items-center gap-3">
                     <span className="text-cyan-300 text-lg leading-none">❯</span>
                     <div className="flex-1 min-w-0">
-                      <PromptLine cwd={fs.cwd}>
-                        <input
-                          ref={inputRef}
-                          autoFocus
-                          value={input}
-                          onChange={e => setInput(e.target.value)}
-                          onKeyDown={onKeyDown}
-                          spellCheck={false}
-                          placeholder="Type a command… (try: ls -l, cat readme.txt, grep -i notes notes.md)"
-                          className="w-full bg-transparent outline-none caret-cyan-300 placeholder:text-slate-500 text-[15px] leading-tight tracking-tight"
-                        />
-                      </PromptLine>
+                      <PromptLine cwd={fs.cwd} inputRef={inputRef} onKeyDown={onKeyDown} input={input} setInput={setInput} />
                       <div className="mt-1 text-[11px] text-slate-500">{miniHelp}</div>
                     </div>
                   </div>
 
-                  {suggestions.length > 0 && (
+                  {suggestions.length > 0 && input.length > 0 && (
                     <div className="absolute left-3 right-3 top-[calc(100%+6px)] z-20">
                       <div className="rounded-xl border border-white/10 bg-[#0b0f15]/95 backdrop-blur-md shadow-2xl">
                         <ul className="max-h-64 overflow-auto text-sm divide-y divide-white/5">
