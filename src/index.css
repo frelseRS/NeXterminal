@@ -7,3 +7,10 @@
   html, body, #root { height: 100%; }
   body { @apply bg-[var(--bg-ink)] text-slate-100 font-mono antialiased; }
 }
+
+/* input focus style for caret */
+input:focus {
+  outline: none !important;
+  box-shadow: none !important;
+  caret-color: #22d3ee !important; /* cyan-300 */
+}
