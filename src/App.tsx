@@ -8,6 +8,7 @@ import { REGISTRY } from "./Shell/commands";
 import PromptLine from "./ReactComponents/PromptLine";
 import BootMessage from "./ReactComponents/BootMessage";
 import ContextSuggest from "./ReactComponents/ContextSuggest";
+import StatusBar from "./ReactComponents/StatusBar";
 
 // --- Warp-like helper block ---
 function Block({ children, className = "" }: { children: React.ReactNode; className?: string }) {
@@ -189,13 +190,7 @@ export default function App(): JSX.Element {
               </Block>
             </div>
           </div>
-
-          {/* Status bar */}
-          <div className="flex items-center gap-3 px-4 py-2 border-t border-white/10 text-[11px] text-slate-400/80">
-            <span className="truncate">{fs.cwd}</span>
-            <span className="mx-1">•</span>
-            <span>Tips: ↑/↓ history · Tab accept · {isMac ? '⌘' : 'Ctrl'}+U clear line · {isMac ? '⌘' : 'Ctrl'}+C cancel</span>
-          </div>
+          <StatusBar fs={fs} />
         </Block>
       </div>
       <div ref={endRef} />
