@@ -32,6 +32,19 @@ export default function App(): JSX.Element {
 
   const focusInputSoon = () => requestAnimationFrame(() => inputRef.current?.focus());
 
+  // Focus input when clicking anywhere on the main container (except on interactive elements)
+  function handleContainerMouseDown(e: React.MouseEvent<HTMLDivElement>) {
+    // Only focus if the click target is not an input, textarea, or contenteditable
+    const target = e.target as HTMLElement;
+    if (
+      target.tagName !== "INPUT" &&
+      target.tagName !== "TEXTAREA" &&
+      target.getAttribute("contenteditable") !== "true"
+    ) {
+      focusInputSoon();
+    }
+  }
+
   const suggestions = useMemo(() => buildSuggestions(input, fs), [input, fs]);
   const miniHelp = useMemo(() => inlineHelp(input), [input]);
 
@@ -100,7 +113,8 @@ export default function App(): JSX.Element {
   }
 
   return (
-    <div className="min-h-dvh w-full bg-[#0a0d12] text-slate-100 px-3 sm:px-6 py-6 sm:py-10 font-mono">
+    <div className="min-h-dvh w-full bg-[#0a0d12] text-slate-100 px-3 sm:px-6 py-6 sm:py-10 font-mono"
+      onMouseDown={handleContainerMouseDown}>
       <div className="mx-auto w-full max-w-5xl space-y-4">
         {/* Toolbar */}
         <Block>

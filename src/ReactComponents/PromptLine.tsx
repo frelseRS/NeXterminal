@@ -9,6 +9,7 @@ interface PromptLineProps {
 }
 
 export default function PromptLine({ cwd, inputRef, input, setInput, onKeyDown }: PromptLineProps) {
+
   return (
     <div className="flex items-center gap-2">
       <span className="text-cyan-300 hidden sm:inline">dev@browser</span>
@@ -18,7 +19,6 @@ export default function PromptLine({ cwd, inputRef, input, setInput, onKeyDown }
       <div className="flex-1 min-w-0">
         <input
           ref={inputRef}
-          autoFocus
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={onKeyDown}
