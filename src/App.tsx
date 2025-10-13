@@ -3,10 +3,11 @@ import { clamp, isMac, nowStr, tokenize } from "./utils";
 import type { HistoryItem } from "./interfaces/HistoryItem";
 import type { VirtualFS } from "./FileSystem/types";
 import makeFS from "./FileSystem/Controller";
-import { buildSuggestions, inlineHelp } from "./Shell/prompt";
+import { buildSuggestions, inlineHelp } from "./Shell/service";
 import { REGISTRY } from "./Shell/commands";
 import PromptLine from "./ReactComponents/PromptLine";
 import BootMessage from "./ReactComponents/BootMessage";
+import ContextSuggest from "./ReactComponents/ContextSuggest";
 
 // --- Warp-like helper block ---
 function Block({ children, className = "" }: { children: React.ReactNode; className?: string }) {
@@ -174,24 +175,15 @@ export default function App(): JSX.Element {
                   </div>
 
                   {suggestions.length > 0 && input.length > 0 && (
-                    <div className="absolute left-3 right-3 top-[calc(100%+6px)] z-20">
-                      <div className="rounded-xl border border-white/10 bg-[#0b0f15]/95 backdrop-blur-md shadow-2xl">
-                        <ul className="max-h-64 overflow-auto text-sm divide-y divide-white/5">
-                          {suggestions.map((s, i) => (
-                            <li
-                              key={s.kind + s.label + i}
-                              onMouseDown={(e) => { e.preventDefault(); setSuggest(prev => ({ ...prev, index: i })); }}
-                              onDoubleClick={(e) => { e.preventDefault(); setSuggest(prev => ({ ...prev, index: i })); acceptSuggestion(); }}
-                              className={(i === suggest.index ? "bg-white/10 " : "") + "px-3 py-2 flex items-center gap-2 cursor-default select-none"}
-                            >
-                              <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-white/10 text-slate-300 capitalize">{s.kind}</span>
-                              <span className="text-slate-100">{s.label}</span>
-                              {s.hint && <span className="ml-auto text-xs text-slate-400">{s.hint}</span>}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    </div>
+                    <ContextSuggest
+                      suggestions={suggestions}
+                      activeIndex={suggest.index}
+                      onHover={(i) => setSuggest((prev) => ({ ...prev, index: i }))}
+                      onAccept={(i) => {
+                        setSuggest((prev) => ({ ...prev, index: i }));
+                        acceptSuggestion();
+                      }}
+                    />
                   )}
                 </div>
               </Block>
