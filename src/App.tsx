@@ -3,7 +3,7 @@ import { clamp, isMac, fmtMs } from "./Shell/utils";
 import type { HistoryItem } from "./Shell/structs";
 import type { VirtualFS } from "./FileSystem/types";
 import makeFS from "./FileSystem/Controller";
-import { buildSuggestions, inlineHelp, runCommand, tokenize } from "./Shell/service";
+import { buildSuggestions, inlineHelp, runCommand, applySuggestionToInput } from "./Shell/service";
 import PromptLine from "./ReactComponents/PromptLine";
 import BootMessage from "./ReactComponents/BootMessage";
 import ContextSuggest, { type Suggestion } from "./ReactComponents/ContextSuggest";
@@ -56,20 +56,6 @@ export default function App(): JSX.Element {
 
   function clearScreen() { setHistory([]); focusInputSoon(); }
 
-  function acceptSuggestion() {
-    if (!suggestions.length) return;
-    const s = suggestions[suggest.index] || suggestions[0];
-    const t = tokenize(input);
-    if (t.length === 0 || (t.length === 1 && !input.endsWith(" "))) {
-      setInput(s.label + " "); return;
-    }
-    if (input.endsWith(" ")) setInput(input + s.label);
-    else {
-      const idx = input.lastIndexOf(" ");
-      setInput(input.slice(0, idx + 1) + s.label);
-    }
-  }
-
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     const hasSugg = suggestions.length > 0;
     const isMacCmd = isMac && e.metaKey;
@@ -107,7 +93,10 @@ export default function App(): JSX.Element {
     // Accept suggestion
     if (e.key === "Tab") {
       e.preventDefault();
-      acceptSuggestion();
+      if (!suggestions.length) return;
+      const i = suggest.index;
+      const s = suggestions[i] || suggestions[0];
+      setInput(applySuggestionToInput(input, s.label));
       return;
     }
 
@@ -238,10 +227,10 @@ export default function App(): JSX.Element {
                     <ContextSuggest
                       suggestions={suggestions}
                       activeIndex={suggest.index}
-                      onHover={(i) => setSuggest((prev) => ({ ...prev, index: i }))}
-                      onAccept={(i) => {
-                        setSuggest((prev) => ({ ...prev, index: i }));
-                        acceptSuggestion();
+                      onHover={(i) => setSuggest(prev => ({ ...prev, index: i }))}
+                      onAccept={(s, i) => {
+                        setSuggest(prev => ({ ...prev, index: i }));
+                        setInput(applySuggestionToInput(input, s.label));
                       }}
                     />
                   )}

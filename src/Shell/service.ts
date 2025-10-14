@@ -136,3 +136,13 @@ export function tokenize(input: string): string[] {
   }
   return tokens;
 }
+
+export function applySuggestionToInput(input: string, suggestionLabel: string): string {
+  const t = tokenize(input);
+  if (t.length === 0 || (t.length === 1 && !input.endsWith(" "))) {
+    return suggestionLabel + " ";
+  }
+  if (input.endsWith(" ")) return input + suggestionLabel;
+  const idx = input.lastIndexOf(" ");
+  return input.slice(0, idx + 1) + suggestionLabel;
+}
