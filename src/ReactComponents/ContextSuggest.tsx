@@ -1,4 +1,4 @@
-import type { Suggestion } from "../types/Suggestion";
+export type Suggestion = { kind: "command" | "flag" | "file" | "dir"; label: string; hint?: string };
 
 interface ContextSuggestProps {
   suggestions: Suggestion[];

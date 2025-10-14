@@ -1,8 +1,8 @@
-import { tokenize } from "../utils";
-import type { Suggestion } from "../types/Suggestion"; 
+import { tokenize } from "./utils";
+import type { Suggestion } from "../ReactComponents/ContextSuggest"; 
 import type { VirtualFS } from "../FileSystem/types";
 import { getNode } from "../FileSystem/Controller";
-import { REGISTRY } from "./commands";
+import { REGISTRY } from "./helper";
 
 export function buildSuggestions(input: string, fs: VirtualFS): Suggestion[] {
   const tokens = tokenize(input);

@@ -1,15 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState, type JSX } from "react";
-import { clamp, isMac, tokenize, fmtMs } from "./utils";
-import type { HistoryItem } from "./interfaces/HistoryItem";
+import { clamp, isMac, tokenize, fmtMs } from "./Shell/utils";
+import type { HistoryItem } from "./Shell/structs";
 import type { VirtualFS } from "./FileSystem/types";
 import makeFS from "./FileSystem/Controller";
 import { buildSuggestions, inlineHelp } from "./Shell/service";
-import { REGISTRY } from "./Shell/commands";
+import { REGISTRY } from "./Shell/helper";
 import PromptLine from "./ReactComponents/PromptLine";
 import BootMessage from "./ReactComponents/BootMessage";
-import ContextSuggest from "./ReactComponents/ContextSuggest";
+import ContextSuggest, { type Suggestion } from "./ReactComponents/ContextSuggest";
 import StatusBar from "./ReactComponents/StatusBar";
-import type { Suggestion } from "./types/Suggestion";
 
 // --- Warp-like helper block ---
 function Block({ children, className = "" }: { children: React.ReactNode; className?: string }) {
