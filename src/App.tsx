@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState, type JSX } from "react";
-import { clamp, isMac, nowStr, tokenize } from "./utils";
+import { clamp, isMac, fmtDuration, tokenize } from "./utils";
 import type { HistoryItem } from "./interfaces/HistoryItem";
 import type { VirtualFS } from "./FileSystem/types";
 import makeFS from "./FileSystem/Controller";
@@ -59,15 +59,40 @@ export default function App(): JSX.Element {
   function runCommand(line: string) {
     const argv = tokenize(line);
     if (argv.length === 0) return;
+
+    const start = performance.now();  // inizio misurazione
     const name = argv[0];
     const cmd = REGISTRY.byName(name);
-    let out = ""; let exit: 0 | 1 = 0;
-    if (!cmd) { out = name + ": command not found"; exit = 1; }
-    else {
-      try { out = (cmd.handler({ fs, argv, clearScreen }) as string) || ""; }
-      catch (e: any) { out = "Error: " + (e?.message || String(e)); exit = 1; }
+
+    let out = "";
+    let exit: 0 | 1 = 0;
+
+    if (!cmd) {
+      out = `${name}: command not found`;
+      exit = 1;
+    } else {
+      try {
+        out = (cmd.handler({ fs, argv, clearScreen }) as string) || "";
+      } catch (e: any) {
+        out = "Error: " + (e?.message || String(e));
+        exit = 1;
+      }
     }
-    setHistory(h => [...h, { cmd: line, out, ts: new Date() }]);
+
+    const end = performance.now();           // fine misurazione
+    const durationMs = Math.max(0, Math.round(end - start));
+
+    setHistory(h => [
+      ...h,
+      {
+        cmd: line,
+        out,
+        ts: Date.now(),      // epoch ms
+        exit,
+        durationMs,
+      },
+    ]);
+
     setLastExit(exit);
     focusInputSoon();
   }
@@ -87,30 +112,98 @@ export default function App(): JSX.Element {
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "c" && (e.ctrlKey || (isMac && e.metaKey))) {
-      e.preventDefault(); setHistory(h => [...h, { cmd: input, out: "", ts: new Date() }]); setInput(""); setSuggest(s => ({ ...s, index: 0 })); return;
-    }
-    if (e.key === "l" && (e.ctrlKey || (isMac && e.metaKey))) { e.preventDefault(); clearScreen(); return; }
-    if (e.key === "u" && (e.ctrlKey || (isMac && e.metaKey))) { e.preventDefault(); setInput(""); return; }
+    const hasSugg = suggestions.length > 0;
+    const isMacCmd = isMac && e.metaKey;
 
-    if (e.key === "Tab") { e.preventDefault(); acceptSuggestion(); return; }
-
-    if (e.key === "ArrowDown" && suggestions.length) { e.preventDefault(); setSuggest(s => ({ ...s, index: clamp(s.index + 1, 0, suggestions.length - 1) })); return; }
-    if (e.key === "ArrowUp" && suggestions.length) { e.preventDefault(); setSuggest(s => ({ ...s, index: clamp(s.index - 1, 0, suggestions.length - 1) })); return; }
-
-    if (e.key === "Enter") {
-      e.preventDefault(); const line = input.trim();
-      if (line.length) { runCommand(line); setInput(""); setHistIdx(-1); setSuggest(s => ({ ...s, index: 0 })); }
-      else { setHistory(h => [...h, { cmd: "", out: "", ts: new Date() }]); }
+    // ── Shortcuts ────────────────────────────────────────────────────────────────
+    // Cancel (SIGINT)
+    if ((e.key === "c" || e.key === "C") && (e.ctrlKey || isMacCmd)) {
+      e.preventDefault();
+      if (input.trim().length) {
+        // mostra il comando cancellato nello storico con exit=130
+        setHistory(h => [
+          ...h,
+          { cmd: input, out: "", ts: Date.now(), exit: 130 as 0 | 1, durationMs: 0 }
+        ]);
+      }
+      setInput("");
+      setSuggest(s => ({ ...s, index: 0 }));
       return;
     }
 
-    // History navigation when no suggestions list is open
-    if (e.key === "ArrowUp" && !suggestions.length) {
-      if (history.length) { e.preventDefault(); const next = histIdx < 0 ? history.length - 1 : Math.max(0, histIdx - 1); setHistIdx(next); setInput(history[next].cmd); }
+    // Clear screen
+    if ((e.key === "l" || e.key === "L") && (e.ctrlKey || isMacCmd)) {
+      e.preventDefault();
+      clearScreen();
+      return;
     }
-    if (e.key === "ArrowDown" && !suggestions.length) {
-      if (history.length) { e.preventDefault(); const next = histIdx < 0 ? -1 : Math.min(history.length - 1, histIdx + 1); setHistIdx(next); setInput(next === -1 ? "" : history[next].cmd); }
+
+    // Clear line
+    if ((e.key === "u" || e.key === "U") && (e.ctrlKey || isMacCmd)) {
+      e.preventDefault();
+      setInput("");
+      return;
+    }
+
+    // Accept suggestion
+    if (e.key === "Tab") {
+      e.preventDefault();
+      acceptSuggestion();
+      return;
+    }
+
+    // Close suggestions
+    if (e.key === "Escape" && hasSugg) {
+      e.preventDefault();
+      setSuggest(s => ({ ...s, index: 0 }));
+      return;
+    }
+
+    // ── Navigation ───────────────────────────────────────────────────────────────
+    if (e.key === "ArrowDown") {
+      if (hasSugg) {
+        e.preventDefault();
+        setSuggest(s => ({ ...s, index: clamp(s.index + 1, 0, suggestions.length - 1) }));
+        return;
+      }
+      if (history.length) {
+        e.preventDefault();
+        const next = histIdx < 0 ? -1 : Math.min(history.length - 1, histIdx + 1);
+        setHistIdx(next);
+        setInput(next === -1 ? "" : history[next].cmd);
+        return;
+      }
+    }
+
+    if (e.key === "ArrowUp") {
+      if (hasSugg) {
+        e.preventDefault();
+        setSuggest(s => ({ ...s, index: clamp(s.index - 1, 0, suggestions.length - 1) }));
+        return;
+      }
+      if (history.length) {
+        e.preventDefault();
+        const next = histIdx < 0 ? history.length - 1 : Math.max(0, histIdx - 1);
+        setHistIdx(next);
+        setInput(history[next].cmd);
+        return;
+      }
+    }
+
+    // ── Execute ─────────────────────────────────────────────────────────────────
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const line = input.trim();
+
+      if (!line) {
+        return;
+      }
+
+      runCommand(line);               // misura start→end **dentro** runCommand
+      setInput("");
+      setHistIdx(-1);
+      setSuggest(s => ({ ...s, index: 0 }));
+      return;
     }
   }
 
@@ -144,7 +237,7 @@ export default function App(): JSX.Element {
                   <span>•</span>
                   <span className={"px-1.5 py-0.5 rounded border " + (lastExit === 0 ? "border-emerald-400/30 text-emerald-300/90 bg-emerald-500/5" : "border-rose-400/30 text-rose-300/90 bg-rose-500/5")}>exit {lastExit}</span>
                   <span>•</span>
-                  {/* <span>Time elapsed </span> */}
+                  <span>Time elapsed {fmtDuration(h.durationMs)}</span>
                 </div>
                 <Block>
                   <div className="px-4 py-2.5 border-b border-white/10 flex items-center gap-2">
@@ -162,7 +255,7 @@ export default function App(): JSX.Element {
 
             {/* Live prompt */}
             <div className="group">
-              
+
               <Block>
                 <div className="px-3 sm:px-4 py-3 relative">
                   <div className="flex items-center gap-3">
