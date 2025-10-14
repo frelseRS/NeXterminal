@@ -4,7 +4,7 @@ export type CommandHandler = (ctx: {
   fs: VirtualFS;
   argv: string[];
   clearScreen: () => void;
-}) => string | void;
+}) => string | void | Promise<string | void>;
 
 export interface CommandArg { name: string; optional?: boolean; variadic?: boolean }
 export interface CommandOption { flag: string; desc: string }

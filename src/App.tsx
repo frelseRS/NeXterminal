@@ -1,12 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState, type JSX } from "react";
-import { clamp, isMac, nowStr, tokenize } from "./utils";
+import { clamp, isMac, tokenize, fmtMs } from "./utils";
 import type { HistoryItem } from "./interfaces/HistoryItem";
 import type { VirtualFS } from "./FileSystem/types";
 import makeFS from "./FileSystem/Controller";
-import { buildSuggestions, inlineHelp } from "./Shell/prompt";
+import { buildSuggestions, inlineHelp } from "./Shell/service";
 import { REGISTRY } from "./Shell/commands";
 import PromptLine from "./ReactComponents/PromptLine";
 import BootMessage from "./ReactComponents/BootMessage";
+import ContextSuggest from "./ReactComponents/ContextSuggest";
+import StatusBar from "./ReactComponents/StatusBar";
+import type { Suggestion } from "./types/Suggestion";
 
 // --- Warp-like helper block ---
 function Block({ children, className = "" }: { children: React.ReactNode; className?: string }) {
@@ -25,12 +28,26 @@ export default function App(): JSX.Element {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [input, setInput] = useState<string>("");
   const [histIdx, setHistIdx] = useState<number>(-1);
-  const [suggest, setSuggest] = useState<{ items: ReturnType<typeof buildSuggestions>; index: number }>({ items: [], index: 0 });
-  const [lastExit, setLastExit] = useState<0 | 1>(0);
+  const [suggest, setSuggest] = useState<{ items: Suggestion[]; index: number }>({ items: [], index: 0 });
+  const [lastExit, setLastExit] = useState<HistoryItem["exit"]>(0);
   const endRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const pendingIndexRef = useRef<number | null>(null);  // ref per annotare quale blocco aggiornare con il paint time
 
   const focusInputSoon = () => requestAnimationFrame(() => inputRef.current?.focus());
+
+  // Focus input when clicking anywhere on the main container (except on interactive elements)
+  function handleContainerMouseDown(e: React.MouseEvent<HTMLDivElement>) {
+    // Only focus if the click target is not an input, textarea, or contenteditable
+    const target = e.target as HTMLElement;
+    if (
+      target.tagName !== "INPUT" &&
+      target.tagName !== "TEXTAREA" &&
+      target.getAttribute("contenteditable") !== "true"
+    ) {
+      focusInputSoon();
+    }
+  }
 
   const suggestions = useMemo(() => buildSuggestions(input, fs), [input, fs]);
   const miniHelp = useMemo(() => inlineHelp(input), [input]);
@@ -41,21 +58,60 @@ export default function App(): JSX.Element {
 
   function clearScreen() { setHistory([]); focusInputSoon(); }
 
-  function runCommand(line: string) {
+  async function runCommand(line: string) {
     const argv = tokenize(line);
     if (argv.length === 0) return;
+
+    const start = performance.now(); // inizio misurazione
     const name = argv[0];
     const cmd = REGISTRY.byName(name);
-    let out = ""; let exit: 0 | 1 = 0;
-    if (!cmd) { out = name + ": command not found"; exit = 1; }
-    else {
-      try { out = (cmd.handler({ fs, argv, clearScreen }) as string) || ""; }
-      catch (e: any) { out = "Error: " + (e?.message || String(e)); exit = 1; }
+
+    let out = "";
+    let exit: 0 | 1 = 0;
+
+    if (!cmd) {
+      out = `${name}: command not found`;
+      exit = 1;
+    } else {
+      try {
+        // Supporta sia handler sync che async senza cambiare signature di CommandHandler
+        const maybe = cmd.handler({ fs, argv, clearScreen }) as unknown;
+        out = (await Promise.resolve(maybe)) as string | undefined || "";
+      } catch (e: any) {
+        out = "Error: " + (e?.message || String(e));
+        exit = 1;
+      }
     }
-    setHistory(h => [...h, { cmd: line, out, ts: new Date() }]);
+
+    const durationMs = performance.now() - start;
+
+    // push nello storico + marca l’indice per il paint measurement
+    setHistory(h => {
+      const next = [
+        ...h,
+        { cmd: line, out, ts: Date.now(), exit, durationMs }
+      ];
+      pendingIndexRef.current = next.length - 1;
+      return next;
+    });
+
     setLastExit(exit);
+
+    // Misura (approssimata) del tempo fino al primo paint visibile del blocco
+    const t0 = performance.now();
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const paintMs = performance.now() - t0;
+        const idx = pendingIndexRef.current;
+        if (idx != null) {
+          setHistory(h => h.map((it, i) => i === idx ? { ...it, paintMs } : it));
+          pendingIndexRef.current = null;
+        }
+      });
+    });
     focusInputSoon();
   }
+
 
   function acceptSuggestion() {
     if (!suggestions.length) return;
@@ -72,35 +128,102 @@ export default function App(): JSX.Element {
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "c" && (e.ctrlKey || (isMac && e.metaKey))) {
-      e.preventDefault(); setHistory(h => [...h, { cmd: input, out: "", ts: new Date() }]); setInput(""); setSuggest(s => ({ ...s, index: 0 })); return;
-    }
-    if (e.key === "l" && (e.ctrlKey || (isMac && e.metaKey))) { e.preventDefault(); clearScreen(); return; }
-    if (e.key === "u" && (e.ctrlKey || (isMac && e.metaKey))) { e.preventDefault(); setInput(""); return; }
+    const hasSugg = suggestions.length > 0;
+    const isMacCmd = isMac && e.metaKey;
 
-    if (e.key === "Tab") { e.preventDefault(); acceptSuggestion(); return; }
-
-    if (e.key === "ArrowDown" && suggestions.length) { e.preventDefault(); setSuggest(s => ({ ...s, index: clamp(s.index + 1, 0, suggestions.length - 1) })); return; }
-    if (e.key === "ArrowUp" && suggestions.length) { e.preventDefault(); setSuggest(s => ({ ...s, index: clamp(s.index - 1, 0, suggestions.length - 1) })); return; }
-
-    if (e.key === "Enter") {
-      e.preventDefault(); const line = input.trim();
-      if (line.length) { runCommand(line); setInput(""); setHistIdx(-1); setSuggest(s => ({ ...s, index: 0 })); }
-      else { setHistory(h => [...h, { cmd: "", out: "", ts: new Date() }]); }
+    // ── Shortcuts ────────────────────────────────────────────────────────────────
+    // Cancel (SIGINT)
+    if ((e.key === "c" || e.key === "C") && (e.ctrlKey || isMacCmd)) {
+      e.preventDefault();
+      if (input.trim().length) {
+        // mostra il comando cancellato nello storico con exit=130
+        setHistory(h => [
+          ...h,
+          { cmd: input, out: "", ts: Date.now(), exit: 130 as 0 | 1, durationMs: 0 }
+        ]);
+      }
+      setInput("");
+      setSuggest(s => ({ ...s, index: 0 }));
       return;
     }
 
-    // History navigation when no suggestions list is open
-    if (e.key === "ArrowUp" && !suggestions.length) {
-      if (history.length) { e.preventDefault(); const next = histIdx < 0 ? history.length - 1 : Math.max(0, histIdx - 1); setHistIdx(next); setInput(history[next].cmd); }
+    // Clear screen
+    if ((e.key === "l" || e.key === "L") && (e.ctrlKey || isMacCmd)) {
+      e.preventDefault();
+      clearScreen();
+      return;
     }
-    if (e.key === "ArrowDown" && !suggestions.length) {
-      if (history.length) { e.preventDefault(); const next = histIdx < 0 ? -1 : Math.min(history.length - 1, histIdx + 1); setHistIdx(next); setInput(next === -1 ? "" : history[next].cmd); }
+
+    // Clear line
+    if ((e.key === "u" || e.key === "U") && (e.ctrlKey || isMacCmd)) {
+      e.preventDefault();
+      setInput("");
+      return;
     }
+
+    // Accept suggestion
+    if (e.key === "Tab") {
+      e.preventDefault();
+      acceptSuggestion();
+      return;
+    }
+
+    // Close suggestions
+    if (e.key === "Escape" && hasSugg) {
+      e.preventDefault();
+      setSuggest(s => ({ ...s, index: 0 }));
+      return;
+    }
+
+    // ── Navigation ───────────────────────────────────────────────────────────────
+    if (e.key === "ArrowDown") {
+      if (hasSugg) {
+        e.preventDefault();
+        setSuggest(s => ({ ...s, index: clamp(s.index + 1, 0, suggestions.length - 1) }));
+        return;
+      }
+      if (history.length) {
+        e.preventDefault();
+        const next = histIdx < 0 ? -1 : Math.min(history.length - 1, histIdx + 1);
+        setHistIdx(next);
+        setInput(next === -1 ? "" : history[next].cmd);
+        return;
+      }
+    }
+
+    if (e.key === "ArrowUp") {
+      if (hasSugg) {
+        e.preventDefault();
+        setSuggest(s => ({ ...s, index: clamp(s.index - 1, 0, suggestions.length - 1) }));
+        return;
+      }
+      if (history.length) {
+        e.preventDefault();
+        const next = histIdx < 0 ? history.length - 1 : Math.max(0, histIdx - 1);
+        setHistIdx(next);
+        setInput(history[next].cmd);
+        return;
+      }
+    }
+
+    // ── Execute ─────────────────────────────────────────────────────────────────
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const line = input.trim();
+      if (!line) return;
+
+      void runCommand(line);       // fire&forget mode does not wait for completion
+      setInput("");
+      setHistIdx(-1);
+      setSuggest(s => ({ ...s, index: 0 }));
+      return;
+    }
+
   }
 
   return (
-    <div className="min-h-dvh w-full bg-[#0a0d12] text-slate-100 px-3 sm:px-6 py-6 sm:py-10 font-mono">
+    <div className="min-h-dvh w-full bg-[#0a0d12] text-slate-100 px-3 sm:px-6 py-6 sm:py-10 font-mono"
+      onMouseDown={handleContainerMouseDown}>
       <div className="mx-auto w-full max-w-5xl space-y-4">
         {/* Toolbar */}
         <Block>
@@ -127,6 +250,19 @@ export default function App(): JSX.Element {
                   <span>{new Date(h.ts).toLocaleTimeString()}</span>
                   <span>•</span>
                   <span className={"px-1.5 py-0.5 rounded border " + (lastExit === 0 ? "border-emerald-400/30 text-emerald-300/90 bg-emerald-500/5" : "border-rose-400/30 text-rose-300/90 bg-rose-500/5")}>exit {lastExit}</span>
+                  <span>•</span>
+                  <span className="px-1.5 py-0.5 rounded border border-white/10 text-slate-300/90 bg-white/5">
+                    Time elapsed {fmtMs(h.durationMs, 2)}
+                  </span>
+
+                  {"paintMs" in h && typeof h.paintMs === "number" && (
+                    <>
+                      <span>•</span>
+                      <span className="px-1.5 py-0.5 rounded border border-white/10 text-slate-300/90 bg-white/5">
+                        paint {fmtMs(h.paintMs!, 2)}
+                      </span>
+                    </>
+                  )}
                 </div>
                 <Block>
                   <div className="px-4 py-2.5 border-b border-white/10 flex items-center gap-2">
@@ -144,63 +280,33 @@ export default function App(): JSX.Element {
 
             {/* Live prompt */}
             <div className="group">
-              <div className="flex items-center gap-2 text-[11px] text-slate-400/80 mb-1.5">
-                <span className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10">{fs.cwd}</span>
-                <span>•</span>
-                <span>{nowStr()}</span>
-              </div>
+
               <Block>
                 <div className="px-3 sm:px-4 py-3 relative">
                   <div className="flex items-center gap-3">
                     <span className="text-cyan-300 text-lg leading-none">❯</span>
                     <div className="flex-1 min-w-0">
-                      <PromptLine cwd={fs.cwd}>
-                        <input
-                          ref={inputRef}
-                          autoFocus
-                          value={input}
-                          onChange={e => setInput(e.target.value)}
-                          onKeyDown={onKeyDown}
-                          spellCheck={false}
-                          placeholder="Type a command… (try: ls -l, cat readme.txt, grep -i notes notes.md)"
-                          className="w-full bg-transparent outline-none caret-cyan-300 placeholder:text-slate-500 text-[15px] leading-tight tracking-tight"
-                        />
-                      </PromptLine>
+                      <PromptLine cwd={fs.cwd} inputRef={inputRef} onKeyDown={onKeyDown} input={input} setInput={setInput} />
                       <div className="mt-1 text-[11px] text-slate-500">{miniHelp}</div>
                     </div>
                   </div>
 
-                  {suggestions.length > 0 && (
-                    <div className="absolute left-3 right-3 top-[calc(100%+6px)] z-20">
-                      <div className="rounded-xl border border-white/10 bg-[#0b0f15]/95 backdrop-blur-md shadow-2xl">
-                        <ul className="max-h-64 overflow-auto text-sm divide-y divide-white/5">
-                          {suggestions.map((s, i) => (
-                            <li
-                              key={s.kind + s.label + i}
-                              onMouseDown={(e) => { e.preventDefault(); setSuggest(prev => ({ ...prev, index: i })); }}
-                              onDoubleClick={(e) => { e.preventDefault(); setSuggest(prev => ({ ...prev, index: i })); acceptSuggestion(); }}
-                              className={(i === suggest.index ? "bg-white/10 " : "") + "px-3 py-2 flex items-center gap-2 cursor-default select-none"}
-                            >
-                              <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-white/10 text-slate-300 capitalize">{s.kind}</span>
-                              <span className="text-slate-100">{s.label}</span>
-                              {s.hint && <span className="ml-auto text-xs text-slate-400">{s.hint}</span>}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    </div>
+                  {suggestions.length > 0 && input.length > 0 && (
+                    <ContextSuggest
+                      suggestions={suggestions}
+                      activeIndex={suggest.index}
+                      onHover={(i) => setSuggest((prev) => ({ ...prev, index: i }))}
+                      onAccept={(i) => {
+                        setSuggest((prev) => ({ ...prev, index: i }));
+                        acceptSuggestion();
+                      }}
+                    />
                   )}
                 </div>
               </Block>
             </div>
           </div>
-
-          {/* Status bar */}
-          <div className="flex items-center gap-3 px-4 py-2 border-t border-white/10 text-[11px] text-slate-400/80">
-            <span className="truncate">{fs.cwd}</span>
-            <span className="mx-1">•</span>
-            <span>Tips: ↑/↓ history · Tab accept · {isMac ? '⌘' : 'Ctrl'}+U clear line · {isMac ? '⌘' : 'Ctrl'}+C cancel</span>
-          </div>
+          <StatusBar fs={fs} />
         </Block>
       </div>
       <div ref={endRef} />
