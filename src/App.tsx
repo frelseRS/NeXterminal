@@ -1,10 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState, type JSX } from "react";
-import { clamp, isMac, tokenize, fmtMs } from "./Shell/utils";
+import { clamp, isMac, fmtMs } from "./Shell/utils";
 import type { HistoryItem } from "./Shell/structs";
 import type { VirtualFS } from "./FileSystem/types";
 import makeFS from "./FileSystem/Controller";
-import { buildSuggestions, inlineHelp } from "./Shell/service";
-import { REGISTRY } from "./Shell/helper";
+import { buildSuggestions, inlineHelp, runCommand, tokenize } from "./Shell/service";
 import PromptLine from "./ReactComponents/PromptLine";
 import BootMessage from "./ReactComponents/BootMessage";
 import ContextSuggest, { type Suggestion } from "./ReactComponents/ContextSuggest";
@@ -56,61 +55,6 @@ export default function App(): JSX.Element {
   useEffect(() => { inputRef.current?.focus(); }, []);
 
   function clearScreen() { setHistory([]); focusInputSoon(); }
-
-  async function runCommand(line: string) {
-    const argv = tokenize(line);
-    if (argv.length === 0) return;
-
-    const start = performance.now(); // inizio misurazione
-    const name = argv[0];
-    const cmd = REGISTRY.byName(name);
-
-    let out = "";
-    let exit: 0 | 1 = 0;
-
-    if (!cmd) {
-      out = `${name}: command not found`;
-      exit = 1;
-    } else {
-      try {
-        // Supporta sia handler sync che async senza cambiare signature di CommandHandler
-        const maybe = cmd.handler({ fs, argv, clearScreen }) as unknown;
-        out = (await Promise.resolve(maybe)) as string | undefined || "";
-      } catch (e: any) {
-        out = "Error: " + (e?.message || String(e));
-        exit = 1;
-      }
-    }
-
-    const durationMs = performance.now() - start;
-
-    // push nello storico + marca l’indice per il paint measurement
-    setHistory(h => {
-      const next = [
-        ...h,
-        { cmd: line, out, ts: Date.now(), exit, durationMs }
-      ];
-      pendingIndexRef.current = next.length - 1;
-      return next;
-    });
-
-    setLastExit(exit);
-
-    // Misura (approssimata) del tempo fino al primo paint visibile del blocco
-    const t0 = performance.now();
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        const paintMs = performance.now() - t0;
-        const idx = pendingIndexRef.current;
-        if (idx != null) {
-          setHistory(h => h.map((it, i) => i === idx ? { ...it, paintMs } : it));
-          pendingIndexRef.current = null;
-        }
-      });
-    });
-    focusInputSoon();
-  }
-
 
   function acceptSuggestion() {
     if (!suggestions.length) return;
@@ -211,7 +155,7 @@ export default function App(): JSX.Element {
       const line = input.trim();
       if (!line) return;
 
-      void runCommand(line);       // fire&forget mode does not wait for completion
+      void runCommand(line, fs, clearScreen, setHistory, setLastExit, pendingIndexRef, focusInputSoon);       // fire&forget mode does not wait for completion
       setInput("");
       setHistIdx(-1);
       setSuggest(s => ({ ...s, index: 0 }));

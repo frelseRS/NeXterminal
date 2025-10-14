@@ -1,6 +1,6 @@
-import { tokenize } from "./utils";
-import type { Suggestion } from "../ReactComponents/ContextSuggest"; 
+import type { Suggestion } from "../ReactComponents/ContextSuggest";
 import type { VirtualFS } from "../FileSystem/types";
+import type { HistoryItem } from "./structs";
 import { getNode } from "../FileSystem/Controller";
 import { REGISTRY } from "./helper";
 
@@ -55,4 +55,84 @@ export function inlineHelp(input: string): string {
   const cmd = REGISTRY.byName(t[0]);
   if (!cmd) return "Unknown command. Type 'help'.";
   return (cmd.usage || cmd.name);
+}
+
+export async function runCommand(line: string, fs: VirtualFS, clearScreen: () => void, setHistory: React.Dispatch<React.SetStateAction<HistoryItem[]>>, setLastExit: React.Dispatch<React.SetStateAction<HistoryItem["exit"]>>, pendingIndexRef: React.MutableRefObject<number | null>, focusInputSoon: () => void): Promise<void> {
+  const argv = tokenize(line);
+  if (argv.length === 0) return;
+
+  const start = performance.now(); // inizio misurazione
+  const name = argv[0];
+  const cmd = REGISTRY.byName(name);
+
+  let out = "";
+  let exit: 0 | 1 = 0;
+
+  if (!cmd) {
+    out = `${name}: command not found`;
+    exit = 1;
+  } else {
+    try {
+      // Supporta sia handler sync che async senza cambiare signature di CommandHandler
+      const maybe = cmd.handler({ fs, argv, clearScreen }) as unknown;
+      out = (await Promise.resolve(maybe)) as string | undefined || "";
+    } catch (e: any) {
+      out = "Error: " + (e?.message || String(e));
+      exit = 1;
+    }
+  }
+
+  const durationMs = performance.now() - start;
+
+  // push nello storico + marca l’indice per il paint measurement
+  setHistory(h => {
+    const next = [
+      ...h,
+      { cmd: line, out, ts: Date.now(), exit, durationMs }
+    ];
+    pendingIndexRef.current = next.length - 1;
+    return next;
+  });
+
+  setLastExit(exit);
+
+  // Misura (approssimata) del tempo fino al primo paint visibile del blocco
+  const t0 = performance.now();
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      const paintMs = performance.now() - t0;
+      const idx = pendingIndexRef.current;
+      if (idx != null) {
+        setHistory(h => h.map((it, i) => i === idx ? { ...it, paintMs } : it));
+        pendingIndexRef.current = null;
+      }
+    });
+  });
+  focusInputSoon();
+}
+
+export function tokenize(input: string): string[] {
+  const tokens: string[] = [];
+  let i = 0;
+  while (i < input.length) {
+    while (i < input.length && /\s/.test(input[i])) i++;
+    if (i >= input.length) break;
+    let buf = "";
+    if (input[i] === '"' || input[i] === "'") {
+      const quote = input[i++] as '"' | "'";
+      while (i < input.length) {
+        if (input[i] === "\\" && i + 1 < input.length) { buf += input[i + 1]; i += 2; continue; }
+        if (input[i] === quote) { i++; break; }
+        buf += input[i++];
+      }
+      tokens.push(buf);
+      continue;
+    }
+    while (i < input.length && !/\s/.test(input[i])) {
+      if (input[i] === "\\" && i + 1 < input.length) { buf += input[i + 1]; i += 2; continue; }
+      buf += input[i++];
+    }
+    tokens.push(buf);
+  }
+  return tokens;
 }
