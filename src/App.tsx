@@ -9,6 +9,7 @@ import PromptLine from "./ReactComponents/PromptLine";
 import BootMessage from "./ReactComponents/BootMessage";
 import ContextSuggest from "./ReactComponents/ContextSuggest";
 import StatusBar from "./ReactComponents/StatusBar";
+import type { Suggestion } from "./types/Suggestion";
 
 // --- Warp-like helper block ---
 function Block({ children, className = "" }: { children: React.ReactNode; className?: string }) {
@@ -27,8 +28,8 @@ export default function App(): JSX.Element {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [input, setInput] = useState<string>("");
   const [histIdx, setHistIdx] = useState<number>(-1);
-  const [suggest, setSuggest] = useState<{ items: ReturnType<typeof buildSuggestions>; index: number }>({ items: [], index: 0 });
-  const [lastExit, setLastExit] = useState<0 | 1>(0);
+  const [suggest, setSuggest] = useState<{ items: Suggestion[]; index: number }>({ items: [], index: 0 });
+  const [lastExit, setLastExit] = useState<HistoryItem["exit"]>(0);
   const endRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const pendingIndexRef = useRef<number | null>(null);  // ref per annotare quale blocco aggiornare con il paint time
@@ -108,8 +109,6 @@ export default function App(): JSX.Element {
         }
       });
     });
-
-    // opzionale: riporta focus all’input
     focusInputSoon();
   }
 
