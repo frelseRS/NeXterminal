@@ -35,3 +35,8 @@ export function fmtDuration(ms: number): string {
   const s = Math.round((ms % 60_000) / 1000);
   return `${m}m ${s}s`;
 }
+
+export function fmtMs(ms: number, digits: number = 2): string {
+  // mostra “0.00 ms” invece di 0 se è minuscolo
+  return `${ms.toFixed(digits)} ms`;
+}

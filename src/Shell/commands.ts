@@ -1,4 +1,4 @@
-import type {CommandDef} from "./types";
+import type { CommandDef } from "./types";
 import { formatHelp, formatMan } from "./helper";
 import { nowStr } from "../utils";
 import { getNode } from "../FileSystem/Controller";
@@ -116,6 +116,17 @@ export const COMMANDS: CommandDef[] = [
       return cmd ? formatMan(cmd) : "No manual entry for " + argv[1];
     }
   },
+  {
+    name: "sleep",
+    description: "Wait N ms",
+    usage: "sleep <ms>",
+    args: [{ name: "ms" }],
+    async handler({ argv }) {
+      const ms = parseInt(argv[1] || "500", 10);
+      await new Promise(r => setTimeout(r, ms));
+      return `Slept for ${ms} ms`;
+    }
+  }
 ];
 
 export const REGISTRY = {

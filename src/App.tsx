@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState, type JSX } from "react";
-import { clamp, isMac, fmtDuration, tokenize } from "./utils";
+import { clamp, isMac, tokenize, fmtMs } from "./utils";
 import type { HistoryItem } from "./interfaces/HistoryItem";
 import type { VirtualFS } from "./FileSystem/types";
 import makeFS from "./FileSystem/Controller";
@@ -31,6 +31,7 @@ export default function App(): JSX.Element {
   const [lastExit, setLastExit] = useState<0 | 1>(0);
   const endRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const pendingIndexRef = useRef<number | null>(null);  // ref per annotare quale blocco aggiornare con il paint time
 
   const focusInputSoon = () => requestAnimationFrame(() => inputRef.current?.focus());
 
@@ -56,11 +57,11 @@ export default function App(): JSX.Element {
 
   function clearScreen() { setHistory([]); focusInputSoon(); }
 
-  function runCommand(line: string) {
+  async function runCommand(line: string) {
     const argv = tokenize(line);
     if (argv.length === 0) return;
 
-    const start = performance.now();  // inizio misurazione
+    const start = performance.now(); // inizio misurazione
     const name = argv[0];
     const cmd = REGISTRY.byName(name);
 
@@ -72,30 +73,46 @@ export default function App(): JSX.Element {
       exit = 1;
     } else {
       try {
-        out = (cmd.handler({ fs, argv, clearScreen }) as string) || "";
+        // Supporta sia handler sync che async senza cambiare signature di CommandHandler
+        const maybe = cmd.handler({ fs, argv, clearScreen }) as unknown;
+        out = (await Promise.resolve(maybe)) as string | undefined || "";
       } catch (e: any) {
         out = "Error: " + (e?.message || String(e));
         exit = 1;
       }
     }
 
-    const end = performance.now();           // fine misurazione
-    const durationMs = Math.max(0, Math.round(end - start));
+    const durationMs = performance.now() - start;
 
-    setHistory(h => [
-      ...h,
-      {
-        cmd: line,
-        out,
-        ts: Date.now(),      // epoch ms
-        exit,
-        durationMs,
-      },
-    ]);
+    // push nello storico + marca l’indice per il paint measurement
+    setHistory(h => {
+      const next = [
+        ...h,
+        { cmd: line, out, ts: Date.now(), exit, durationMs }
+      ];
+      pendingIndexRef.current = next.length - 1;
+      return next;
+    });
 
     setLastExit(exit);
+
+    // Misura (approssimata) del tempo fino al primo paint visibile del blocco
+    const t0 = performance.now();
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const paintMs = performance.now() - t0;
+        const idx = pendingIndexRef.current;
+        if (idx != null) {
+          setHistory(h => h.map((it, i) => i === idx ? { ...it, paintMs } : it));
+          pendingIndexRef.current = null;
+        }
+      });
+    });
+
+    // opzionale: riporta focus all’input
     focusInputSoon();
   }
+
 
   function acceptSuggestion() {
     if (!suggestions.length) return;
@@ -194,17 +211,15 @@ export default function App(): JSX.Element {
     if (e.key === "Enter") {
       e.preventDefault();
       const line = input.trim();
+      if (!line) return;
 
-      if (!line) {
-        return;
-      }
-
-      runCommand(line);               // misura start→end **dentro** runCommand
+      void runCommand(line);       // fire&forget mode does not wait for completion
       setInput("");
       setHistIdx(-1);
       setSuggest(s => ({ ...s, index: 0 }));
       return;
     }
+
   }
 
   return (
@@ -237,7 +252,18 @@ export default function App(): JSX.Element {
                   <span>•</span>
                   <span className={"px-1.5 py-0.5 rounded border " + (lastExit === 0 ? "border-emerald-400/30 text-emerald-300/90 bg-emerald-500/5" : "border-rose-400/30 text-rose-300/90 bg-rose-500/5")}>exit {lastExit}</span>
                   <span>•</span>
-                  <span>Time elapsed {fmtDuration(h.durationMs)}</span>
+                  <span className="px-1.5 py-0.5 rounded border border-white/10 text-slate-300/90 bg-white/5">
+                    Time elapsed {fmtMs(h.durationMs, 2)}
+                  </span>
+
+                  {"paintMs" in h && typeof h.paintMs === "number" && (
+                    <>
+                      <span>•</span>
+                      <span className="px-1.5 py-0.5 rounded border border-white/10 text-slate-300/90 bg-white/5">
+                        paint {fmtMs(h.paintMs!, 2)}
+                      </span>
+                    </>
+                  )}
                 </div>
                 <Block>
                   <div className="px-4 py-2.5 border-b border-white/10 flex items-center gap-2">
