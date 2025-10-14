@@ -143,6 +143,8 @@ export default function App(): JSX.Element {
                   <span>{new Date(h.ts).toLocaleTimeString()}</span>
                   <span>•</span>
                   <span className={"px-1.5 py-0.5 rounded border " + (lastExit === 0 ? "border-emerald-400/30 text-emerald-300/90 bg-emerald-500/5" : "border-rose-400/30 text-rose-300/90 bg-rose-500/5")}>exit {lastExit}</span>
+                  <span>•</span>
+                  {/* <span>Time elapsed </span> */}
                 </div>
                 <Block>
                   <div className="px-4 py-2.5 border-b border-white/10 flex items-center gap-2">
@@ -160,11 +162,7 @@ export default function App(): JSX.Element {
 
             {/* Live prompt */}
             <div className="group">
-              <div className="flex items-center gap-2 text-[11px] text-slate-400/80 mb-1.5">
-                <span className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10">{fs.cwd}</span>
-                <span>•</span>
-                <span>{nowStr()}</span>
-              </div>
+              
               <Block>
                 <div className="px-3 sm:px-4 py-3 relative">
                   <div className="flex items-center gap-3">
