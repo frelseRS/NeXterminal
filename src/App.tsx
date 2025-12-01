@@ -1,15 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState, type JSX } from "react";
-import { clamp, isMac, tokenize, fmtMs } from "./utils";
-import type { HistoryItem } from "./interfaces/HistoryItem";
+import { clamp, isMac, fmtMs } from "./Shell/utils";
+import type { HistoryItem } from "./Shell/structs";
 import type { VirtualFS } from "./FileSystem/types";
 import makeFS from "./FileSystem/Controller";
-import { buildSuggestions, inlineHelp } from "./Shell/service";
-import { REGISTRY } from "./Shell/commands";
+import { buildSuggestions, inlineHelp, runCommand, applySuggestionToInput } from "./Shell/service";
 import PromptLine from "./ReactComponents/PromptLine";
 import BootMessage from "./ReactComponents/BootMessage";
-import ContextSuggest from "./ReactComponents/ContextSuggest";
+import ContextSuggest, { type Suggestion } from "./ReactComponents/ContextSuggest";
 import StatusBar from "./ReactComponents/StatusBar";
-import type { Suggestion } from "./types/Suggestion";
 
 // --- Warp-like helper block ---
 function Block({ children, className = "" }: { children: React.ReactNode; className?: string }) {
@@ -58,75 +56,6 @@ export default function App(): JSX.Element {
 
   function clearScreen() { setHistory([]); focusInputSoon(); }
 
-  async function runCommand(line: string) {
-    const argv = tokenize(line);
-    if (argv.length === 0) return;
-
-    const start = performance.now(); // inizio misurazione
-    const name = argv[0];
-    const cmd = REGISTRY.byName(name);
-
-    let out = "";
-    let exit: 0 | 1 = 0;
-
-    if (!cmd) {
-      out = `${name}: command not found`;
-      exit = 1;
-    } else {
-      try {
-        // Supporta sia handler sync che async senza cambiare signature di CommandHandler
-        const maybe = cmd.handler({ fs, argv, clearScreen }) as unknown;
-        out = (await Promise.resolve(maybe)) as string | undefined || "";
-      } catch (e: any) {
-        out = "Error: " + (e?.message || String(e));
-        exit = 1;
-      }
-    }
-
-    const durationMs = performance.now() - start;
-
-    // push nello storico + marca l’indice per il paint measurement
-    setHistory(h => {
-      const next = [
-        ...h,
-        { cmd: line, out, ts: Date.now(), exit, durationMs }
-      ];
-      pendingIndexRef.current = next.length - 1;
-      return next;
-    });
-
-    setLastExit(exit);
-
-    // Misura (approssimata) del tempo fino al primo paint visibile del blocco
-    const t0 = performance.now();
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        const paintMs = performance.now() - t0;
-        const idx = pendingIndexRef.current;
-        if (idx != null) {
-          setHistory(h => h.map((it, i) => i === idx ? { ...it, paintMs } : it));
-          pendingIndexRef.current = null;
-        }
-      });
-    });
-    focusInputSoon();
-  }
-
-
-  function acceptSuggestion() {
-    if (!suggestions.length) return;
-    const s = suggestions[suggest.index] || suggestions[0];
-    const t = tokenize(input);
-    if (t.length === 0 || (t.length === 1 && !input.endsWith(" "))) {
-      setInput(s.label + " "); return;
-    }
-    if (input.endsWith(" ")) setInput(input + s.label);
-    else {
-      const idx = input.lastIndexOf(" ");
-      setInput(input.slice(0, idx + 1) + s.label);
-    }
-  }
-
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     const hasSugg = suggestions.length > 0;
     const isMacCmd = isMac && e.metaKey;
@@ -164,7 +93,10 @@ export default function App(): JSX.Element {
     // Accept suggestion
     if (e.key === "Tab") {
       e.preventDefault();
-      acceptSuggestion();
+      if (!suggestions.length) return;
+      const i = suggest.index;
+      const s = suggestions[i] || suggestions[0];
+      setInput(applySuggestionToInput(input, s.label));
       return;
     }
 
@@ -212,7 +144,7 @@ export default function App(): JSX.Element {
       const line = input.trim();
       if (!line) return;
 
-      void runCommand(line);       // fire&forget mode does not wait for completion
+      void runCommand(line, fs, clearScreen, setHistory, setLastExit, pendingIndexRef, focusInputSoon);       // fire&forget mode does not wait for completion
       setInput("");
       setHistIdx(-1);
       setSuggest(s => ({ ...s, index: 0 }));
@@ -295,10 +227,10 @@ export default function App(): JSX.Element {
                     <ContextSuggest
                       suggestions={suggestions}
                       activeIndex={suggest.index}
-                      onHover={(i) => setSuggest((prev) => ({ ...prev, index: i }))}
-                      onAccept={(i) => {
-                        setSuggest((prev) => ({ ...prev, index: i }));
-                        acceptSuggestion();
+                      onHover={(i) => setSuggest(prev => ({ ...prev, index: i }))}
+                      onAccept={(s, i) => {
+                        setSuggest(prev => ({ ...prev, index: i }));
+                        setInput(applySuggestionToInput(input, s.label));
                       }}
                     />
                   )}

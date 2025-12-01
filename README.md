@@ -1,73 +1,162 @@
-# React + TypeScript + Vite
+# ⚡ Web Terminal — Warp-Style Browser Shell
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A modern, Warp-inspired **web terminal emulator** built with **React + TypeScript + Tailwind CSS**.  
+It runs entirely in the browser — no backend required — and supports **Bash/Zsh-like autocompletion**,  
+**inline help**, and **measurable command execution times**.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## ✨ Features
 
-## React Compiler
+- 🧠 **Autocomplete & Context Suggestions**  
+  Context-aware autocompletion for commands, flags, and paths — similar to Warp’s “AI command palette”.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- 💡 **Inline Command Help**  
+  Displays quick usage hints below the prompt as you type.
 
-## Expanding the ESLint configuration
+- ⚙️ **Virtual File System (VFS)**  
+  Simulates a minimal Linux-like directory tree (`/home/dev`), allowing navigation (`cd`, `ls`, `cat`, etc.).
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- 🕒 **Execution & Paint Time Measurement**  
+  Each executed command tracks both processing duration (`durationMs`) and UI paint time (`paintMs`).
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+- 🎨 **Warp-Inspired UI**  
+  Uses glassmorphism, gradient accents, and shadowed blocks for a premium, desktop-grade look.
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+- 🧩 **Modular Architecture**  
+  Commands, FS, and Shell utilities are split into independent TypeScript modules.  
+  Each piece can be extended or replaced without affecting the rest of the system.
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+- 🔁 **Keyboard Shortcuts**
+  | Shortcut | Action |
+  |-----------|--------|
+  | <kbd>Tab</kbd> | Accept suggestion |
+  | <kbd>↑</kbd> / <kbd>↓</kbd> | Navigate history or suggestions |
+  | <kbd>Ctrl/Cmd + L</kbd> | Clear screen |
+  | <kbd>Ctrl/Cmd + U</kbd> | Clear current line |
+  | <kbd>Ctrl/Cmd + C</kbd> | Cancel / Interrupt command |
+
+---
+
+## 🧱 Architecture Overview
+
+| Module | Purpose |
+|:--|:--|
+| `Shell/service.ts` | Core shell logic (tokenization, autocompletion, inline help, async command execution) |
+| `FileSystem/Controller.ts` | In-memory virtual file system |
+| `ReactComponents/PromptLine.tsx` | Command input line UI |
+| `ReactComponents/ContextSuggest.tsx` | Dropdown for command suggestions |
+| `ReactComponents/StatusBar.tsx` | Footer info bar (cwd, hints, tips) |
+| `App.tsx` | Main container handling I/O, history, and orchestration |
+
+---
+
+## 🚀 Running Locally
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/frelseRS/NeXterminal.git
+cd web-terminal
+
+# 2. Install dependencies
+npm install
+
+# 3. Start the dev server
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Example Commands
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+**Keyboard Shortcuts**
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+| Command                      | Description                        |
+| ---------------------------|--------------------------------- |
+| <kbd>help</kbd>                       | Lists all available commands       |
+| <kbd>help </kbd>              | Shows usage for a specific command |
+| <kbd>ls [-l] [path]</kbd>              | Lists directory contents           |
+| <kbd>cd [path]</kbd>                  | Changes current directory          |
+| <kbd>cat <file></kbd>                | Prints file content                |
+| <kbd>grep [-i] <pattern> <file></kbd>  | Searches for a pattern in a file   |
+| <kbd>date</kbd>                        | Prints current system time         |
+| <kbd>clear</kbd>                       | Clears the terminal                |
+| <kbd>man <command></kbd>               | Displays a mock manual page        |
+
+## Tech Stack
+
+- React 18
+
+- TypeScript
+
+- Tailwind CSS 3+
+
+- Vite
+
+- Virtual DOM for performance-accurate render timing (via ```performance.now()``` and ```requestAnimationFrame()```)
+
+
+
+## 🧮 Performance Measurement
+
+Each command logs:
+
+- durationMs: pure execution time (handler start → handler finish)
+
+- paintMs: render-to-screen latency (tracked via useRef and requestAnimationFrame)
+
+These metrics are shown inline for each command block.
+
+## 🧑‍💻 Extending the Shell
+
+To add a new command:
+
 ```
+typescript
+
+import type { CommandDef } from "../Shell/structs";
+
+export const myCommand: CommandDef = {
+  name: "ping",
+  description: "Simulate network ping",
+  usage: "ping <host>",
+  handler: async ({ argv }) => {
+    const host = argv[1] || "localhost";
+    await new Promise(res => setTimeout(res, 200));
+    return `PONG from ${host}`;
+  },
+};
+```
+
+
+Then register it inside ```Shell\commands.ts:```
+
+```
+typescript
+
+import { myCommand } from "./myCommand";
+export const COMMANDS = [myCommand, ...existingCommands];
+```
+
+
+## 🧪 Future Ideas
+
+- Persistent session storage (e.g. localStorage or IndexedDB)
+
+- Real shell piping simulation (|, >, etc.)
+
+- Theme switching (Warp dark/light presets)
+
+- Bridge to real OS commands (sandboxed); who knows
+
+## License
+
+MIT License © 2025 — Built for experimentation and portfolio purposes.
+Feel free to ask if you want to contribute.
+
+## Author
+
+**sAlvo**
+
+💻 Full-stack developer | React / .NET / Python | Passionate about operating systems, security, and engineering.
+
+>A skate cruiser, but also someone who is between Bruce Wayne and Tony Stark — because, after all, that’s who I am.
+>

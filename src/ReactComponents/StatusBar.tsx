@@ -1,4 +1,4 @@
-import { isMac } from "../utils";
+import { isMac } from "../Shell/utils";
 
 export default function StatusBar({ fs }: { fs: { cwd: string } }) {
     return (

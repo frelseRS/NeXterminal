@@ -1,4 +1,5 @@
-import type { CommandDef } from "./types";
+import type { CommandDef } from "./structs";
+import { COMMANDS } from "./commands";
 
 const fmtArgs = (cmd: CommandDef): string => (cmd.args || [])
   .map(a => a.variadic ? a.name + "..." : a.optional ? "[" + a.name + "]" : "<" + a.name + ">")
@@ -24,3 +25,10 @@ export function formatMan(cmd: CommandDef): string {
   parts.push("DESCRIPTION\n    Demo manual entry. Extend as needed.");
   return parts.join("\n\n");
 }
+
+export const REGISTRY = {
+  list: COMMANDS,
+  all(): CommandDef[] { return this.list; },
+  byName(n: string): CommandDef | undefined { return this.list.find(c => c.name === n); },
+  names(): string[] { return this.list.map(c => c.name); }
+};

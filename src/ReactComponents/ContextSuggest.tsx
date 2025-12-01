@@ -1,10 +1,10 @@
-import type { Suggestion } from "../types/Suggestion";
+export type Suggestion = { kind: "command" | "flag" | "file" | "dir"; label: string; hint?: string };
 
 interface ContextSuggestProps {
   suggestions: Suggestion[];
   activeIndex: number;
   onHover: (index: number) => void;
-  onAccept: (index: number) => void;
+  onAccept: (s: Suggestion, index: number) => void; // <— passa l'oggetto
 }
 
 /**
@@ -25,26 +25,13 @@ export default function ContextSuggest({
           {suggestions.map((s, i) => (
             <li
               key={s.kind + s.label + i}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                onHover(i);
-              }}
-              onDoubleClick={(e) => {
-                e.preventDefault();
-                onAccept(i);
-              }}
-              className={
-                (i === activeIndex ? "bg-white/10 " : "") +
-                "px-3 py-2 flex items-center gap-2 cursor-default select-none"
-              }
+              onMouseDown={(e) => { e.preventDefault(); onHover(i); }}
+              onDoubleClick={(e) => { e.preventDefault(); onAccept(s, i); }}
+              className={(i === activeIndex ? "bg-white/10 " : "") + "px-3 py-2 flex items-center gap-2 cursor-default select-none"}
             >
-              <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-white/10 text-slate-300 capitalize">
-                {s.kind}
-              </span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-white/10 text-slate-300 capitalize">{s.kind}</span>
               <span className="text-slate-100">{s.label}</span>
-              {s.hint && (
-                <span className="ml-auto text-xs text-slate-400">{s.hint}</span>
-              )}
+              {s.hint && <span className="ml-auto text-xs text-slate-400">{s.hint}</span>}
             </li>
           ))}
         </ul>

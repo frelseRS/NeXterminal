@@ -1,6 +1,7 @@
-import type { CommandDef } from "./types";
+import type { CommandDef } from "./structs";
+import { REGISTRY } from "./helper";
 import { formatHelp, formatMan } from "./helper";
-import { nowStr } from "../utils";
+import { nowStr } from "./utils";
 import { getNode } from "../FileSystem/Controller";
 
 export const COMMANDS: CommandDef[] = [
@@ -129,9 +130,9 @@ export const COMMANDS: CommandDef[] = [
   }
 ];
 
-export const REGISTRY = {
-  list: COMMANDS,
-  all(): CommandDef[] { return this.list; },
-  byName(n: string): CommandDef | undefined { return this.list.find(c => c.name === n); },
-  names(): string[] { return this.list.map(c => c.name); }
-};
+// export const REGISTRY = {
+//   list: COMMANDS,
+//   all(): CommandDef[] { return this.list; },
+//   byName(n: string): CommandDef | undefined { return this.list.find(c => c.name === n); },
+//   names(): string[] { return this.list.map(c => c.name); }
+// };
