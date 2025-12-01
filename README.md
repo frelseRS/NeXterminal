@@ -107,14 +107,12 @@ These metrics are shown inline for each command block.
 
 ## 🧑‍💻 Extending the Shell
 
-To add a new command:
+To add a new command, put a similar object inside ```Shell\commands.ts:```
 
 ```
 typescript
 
-import type { CommandDef } from "../Shell/structs";
-
-export const myCommand: CommandDef = {
+{
   name: "ping",
   description: "Simulate network ping",
   usage: "ping <host>",
@@ -125,17 +123,6 @@ export const myCommand: CommandDef = {
   },
 };
 ```
-
-
-Then register it inside ```Shell\commands.ts:```
-
-```
-typescript
-
-import { myCommand } from "./myCommand";
-export const COMMANDS = [myCommand, ...existingCommands];
-```
-
 
 ## 🧪 Future Ideas
 
